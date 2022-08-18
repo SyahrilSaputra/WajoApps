@@ -30,15 +30,12 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.google.android.material.snackbar.Snackbar;
-import com.google.android.play.core.appupdate.AppUpdateInfo;
 import com.google.android.play.core.appupdate.AppUpdateManager;
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory;
-import com.google.android.play.core.install.InstallState;
 import com.google.android.play.core.install.InstallStateUpdatedListener;
 import com.google.android.play.core.install.model.AppUpdateType;
 import com.google.android.play.core.install.model.InstallStatus;
 import com.google.android.play.core.install.model.UpdateAvailability;
-import com.google.android.play.core.tasks.OnSuccessListener;
 
 import java.io.File;
 import java.io.IOException;
@@ -68,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         //set layout orientation
-        setRequestedOrientation (ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+//        setRequestedOrientation (ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         setContentView(R.layout.activity_main);
 
         webView = (WebView) findViewById(R.id.webview);
@@ -79,6 +76,9 @@ public class MainActivity extends AppCompatActivity {
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setAllowFileAccess(true);
+
+        //cache
+        webSettings.setAppCacheEnabled(false);
 
         if(Build.VERSION.SDK_INT >= 21){
             webSettings.setMixedContentMode(0);
@@ -96,6 +96,12 @@ public class MainActivity extends AppCompatActivity {
                 super.onReceivedError(view, request, error);
             }
         });
+
+        //clear cache
+        webView.clearCache(true);
+        webView.loadUrl("about:blank");
+        webView.reload();
+
         webView.loadUrl("https://wajokec.makassarkota.go.id/pelayanan_online/");
 
         progressBar.setProgress(0);
@@ -177,14 +183,13 @@ public class MainActivity extends AppCompatActivity {
     public boolean onKeyDown(int keyCode, @NonNull KeyEvent event){
         if(event.getAction() == KeyEvent.ACTION_DOWN){
 
-            switch(keyCode){
-                case KeyEvent.KEYCODE_BACK:
-                   if(webView.canGoBack()){
-                       webView.goBack();
-                   }else{
-                       finish();
-                   }
-               return true;
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                if (webView.canGoBack()) {
+                    webView.goBack();
+                } else {
+                    finish();
+                }
+                return true;
             }
         }
         return super.onKeyDown(keyCode, event);
@@ -215,13 +220,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    private InstallStateUpdatedListener installStateUpdatedListener = new InstallStateUpdatedListener() {
-        @Override
-        public void onStateUpdate(@NonNull InstallState state) {
-            if (state.installStatus() == InstallStatus.DOWNLOADED)
-            {
-                ShowCompleteUpdate();
-            }
+    private final InstallStateUpdatedListener installStateUpdatedListener = state -> {
+        if (state.installStatus() == InstallStatus.DOWNLOADED)
+        {
+            ShowCompleteUpdate();
         }
     };
 
@@ -233,54 +235,52 @@ public class MainActivity extends AppCompatActivity {
 
     private void ShowCompleteUpdate()
     {
-        Snackbar snackbar = Snackbar.make(findViewById(android.R.id.content), "Aplikasi siap digunakan", Snackbar.LENGTH_INDEFINITE);
-        snackbar.setAction("Install", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mAppUpdateManager.completeUpdate();
-            }
-        });
+        Snackbar snackbar = Snackbar.make(findViewById(android.R.id.content), "Aplikasi siap", Snackbar.LENGTH_INDEFINITE);
+        snackbar.setAction("Install", view -> mAppUpdateManager.completeUpdate());
         snackbar.show();
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent intent)
     {
-        if (requestCode == RC_APP_UPDATE && resultCode != RESULT_OK)
-        {
-            recreate();
-            Toast.makeText(this, "Update dibatalkan", Toast.LENGTH_SHORT).show();
-        }
         super.onActivityResult(requestCode, resultCode, intent);
-        if(Build.VERSION.SDK_INT >= 21){
-            Uri[] results = null;
-
-            if(resultCode== Activity.RESULT_OK){
-                if(requestCode == FCR){
-                    if(null == mUMA){
-                        return;
-                    }
-                    if(intent == null){
-                        //Capture Photo if no image available
-                        if(mCM != null){
-                            results = new Uri[]{Uri.parse(mCM)};
+        if (requestCode == RC_APP_UPDATE)
+        {
+            if (resultCode != RESULT_OK){
+                Toast.makeText(this, "Update dibatalkan", Toast.LENGTH_SHORT).show();
+            }
+        }else{
+            if(Build.VERSION.SDK_INT >= 21){
+                Uri[] results = null;
+                if(resultCode == Activity.RESULT_OK)
+                {
+                    if(requestCode == FCR)
+                    {
+                        if(null == mUMA) {
+                            return;
                         }
-                    }else{
-                        String dataString = intent.getDataString();
-                        if(dataString != null){
-                            results = new Uri[]{Uri.parse(dataString)};
+                        if(intent == null) {
+                            //Capture Photo if no image available
+                            if(mCM != null) {
+                                results = new Uri[]{Uri.parse(mCM)};
+                            }
+                        }else {
+                            String dataString = intent.getDataString();
+                            if(dataString != null) {
+                                results = new Uri[]{Uri.parse(dataString)};
+                            }
                         }
                     }
                 }
-            }
-            mUMA.onReceiveValue(results);
-            mUMA = null;
-        }else{
-            if(requestCode == FCR){
-                if(null == mUM) return;
-                Uri result = intent == null || resultCode != RESULT_OK ? null : intent.getData();
-                mUM.onReceiveValue(result);
-                mUM = null;
+                mUMA.onReceiveValue(results);
+                mUMA = null;
+            }else{
+                if(requestCode == FCR){
+                    if(null == mUM) return;
+                    Uri result = intent == null || resultCode != RESULT_OK ? null : intent.getData();
+                    mUM.onReceiveValue(result);
+                    mUM = null;
+                }
             }
         }
     }
@@ -288,16 +288,13 @@ public class MainActivity extends AppCompatActivity {
     public void update()
     {
         mAppUpdateManager = AppUpdateManagerFactory.create(this);
-        mAppUpdateManager.getAppUpdateInfo().addOnSuccessListener(new OnSuccessListener<AppUpdateInfo>() {
-            @Override
-            public void onSuccess(AppUpdateInfo result) {
-                if (result.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE && result.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE))
-                {
-                    try {
-                        mAppUpdateManager.startUpdateFlowForResult(result, AppUpdateType.FLEXIBLE, MainActivity.this, RC_APP_UPDATE);
-                    } catch (IntentSender.SendIntentException e) {
-                        e.printStackTrace();
-                    }
+        mAppUpdateManager.getAppUpdateInfo().addOnSuccessListener(result -> {
+            if (result.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE && result.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE))
+            {
+                try {
+                    mAppUpdateManager.startUpdateFlowForResult(result, AppUpdateType.FLEXIBLE, MainActivity.this, RC_APP_UPDATE);
+                } catch (IntentSender.SendIntentException e) {
+                    e.printStackTrace();
                 }
             }
         });
